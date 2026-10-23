@@ -10,6 +10,7 @@ import { AiService, type ContentMediaType } from '../ai/ai.service.js';
 import { InstagramService } from '../instagram/instagram.service.js';
 import {
   MediaService,
+  type ContentAssetKind,
   type ContentAssetType,
 } from '../media/media.service.js';
 
@@ -190,6 +191,7 @@ export class SchedulerService implements OnApplicationShutdown {
     );
     const selectedAsset = await this.mediaService.selectNextContentAsset(
       this.toContentAssetType(type),
+      this.toContentAssetKind(type),
     );
 
     if (type === 'reels') {
@@ -218,6 +220,12 @@ export class SchedulerService implements OnApplicationShutdown {
       case 'stories':
         return 'stories';
     }
+  }
+
+  private toContentAssetKind(
+    type: ScheduledPublicationType,
+  ): ContentAssetKind {
+    return type === 'reels' ? 'video' : 'image';
   }
 
   private getDefaultCaption(type: ScheduledPublicationType): string {
