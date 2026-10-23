@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  OnApplicationBootstrap,
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { Cron, SchedulerRegistry } from '@nestjs/schedule';
@@ -40,14 +41,29 @@ const DEFAULT_REELS_CAPTION =
 const DEFAULT_STORY_CAPTION =
   'Hora de estudar! 📚 Abra o StudyQuest e mantenha o foco. #StudyQuest #Stories';
 
+const CRON_TIME_ZONE = 'America/Sao_Paulo';
+
+const CRON_JOB_NAMES = [
+  'story-morning',
+  'post-lunch',
+  'story-afternoon',
+  'post-evening',
+] as const;
+
+const SCHEDULE_LOG_LINES = [
+  `🗓️ [SCHEDULER] Agendamentos ativos (${CRON_TIME_ZONE}):`,
+  '  • 08:00 — Story (manhã)',
+  '  • 12:30 — Post (almoço)',
+  '  • 18:30 — Story (fim de tarde)',
+  '  • 20:30 — Post (noite)',
+  '  • Reels: somente via trigger manual',
+] as const;
+
 @Injectable()
-export class SchedulerService implements OnApplicationShutdown {
+export class SchedulerService
+  implements OnApplicationBootstrap, OnApplicationShutdown
+{
   private readonly logger = new Logger(SchedulerService.name);
-  private readonly cronJobNames = [
-    'daily-post',
-    'daily-reels',
-    'daily-stories',
-  ];
 
   constructor(
     private readonly instagramService: InstagramService,
@@ -56,10 +72,25 @@ export class SchedulerService implements OnApplicationShutdown {
     private readonly schedulerRegistry: SchedulerRegistry,
   ) {}
 
+  onApplicationBootstrap(): void {
+    const registeredJobs = this.schedulerRegistry.getCronJobs();
+    const missingJobs = CRON_JOB_NAMES.filter(
+      (jobName) => !registeredJobs.has(jobName),
+    );
+
+    this.logger.log(SCHEDULE_LOG_LINES.join('\n'));
+
+    if (missingJobs.length > 0) {
+      this.logger.warn(
+        `[SCHEDULER] Cron jobs não registrados: ${missingJobs.join(', ')}`,
+      );
+    }
+  }
+
   onApplicationShutdown(): void {
     const registeredJobs = this.schedulerRegistry.getCronJobs();
 
-    for (const jobName of this.cronJobNames) {
+    for (const jobName of CRON_JOB_NAMES) {
       if (!registeredJobs.has(jobName)) {
         continue;
       }
@@ -69,38 +100,52 @@ export class SchedulerService implements OnApplicationShutdown {
     }
   }
 
-  @Cron('0 9 * * *', {
-    name: 'daily-post',
-    timeZone: 'America/Sao_Paulo',
+  @Cron('0 0 8 * * *', {
+    name: 'story-morning',
+    timeZone: CRON_TIME_ZONE,
   })
-  async handlePostSchedule(): Promise<void> {
+  async handleMorningStorySchedule(): Promise<void> {
     this.logger.log(
-      '⏰ [CRON] Executando rotina diária de publicação de POST (feed)...',
+      '⏰ [CRON] Executando publicação de STORY da manhã (08:00)...',
     );
 
-    await this.runScheduledPublication('post');
+    await this.runScheduledPublication('stories', 'STORY da manhã');
   }
 
-  @Cron('0 18 * * *', {
-    name: 'daily-reels',
-    timeZone: 'America/Sao_Paulo',
+  @Cron('0 30 12 * * *', {
+    name: 'post-lunch',
+    timeZone: CRON_TIME_ZONE,
   })
-  async handleReelsSchedule(): Promise<void> {
+  async handleLunchPostSchedule(): Promise<void> {
     this.logger.log(
-      '⏰ [CRON] Executando rotina diária de publicação de REELS...',
+      '⏰ [CRON] Executando publicação de POST do almoço (12:30)...',
     );
 
-    await this.runScheduledPublication('reels');
+    await this.runScheduledPublication('post', 'POST do almoço');
   }
 
-  @Cron('0 12,20 * * *', {
-    name: 'daily-stories',
-    timeZone: 'America/Sao_Paulo',
+  @Cron('0 30 18 * * *', {
+    name: 'story-afternoon',
+    timeZone: CRON_TIME_ZONE,
   })
-  async handleStoriesSchedule(): Promise<void> {
-    this.logger.log('⏰ [CRON] Executando rotina de publicação de STORY...');
+  async handleAfternoonStorySchedule(): Promise<void> {
+    this.logger.log(
+      '⏰ [CRON] Executando publicação de STORY do fim de tarde (18:30)...',
+    );
 
-    await this.runScheduledPublication('stories');
+    await this.runScheduledPublication('stories', 'STORY do fim de tarde');
+  }
+
+  @Cron('0 30 20 * * *', {
+    name: 'post-evening',
+    timeZone: CRON_TIME_ZONE,
+  })
+  async handleEveningPostSchedule(): Promise<void> {
+    this.logger.log(
+      '⏰ [CRON] Executando publicação de POST da noite (20:30)...',
+    );
+
+    await this.runScheduledPublication('post', 'POST da noite');
   }
 
   async triggerManualPublish(
@@ -123,16 +168,18 @@ export class SchedulerService implements OnApplicationShutdown {
 
   private async runScheduledPublication(
     type: ScheduledPublicationType,
+    label = type.toUpperCase(),
   ): Promise<void> {
     try {
       const result = await this.publish(type);
 
       this.logger.log(
-        `✅ [CRON] Publicação de ${type.toUpperCase()} concluída (mediaId: ${result.mediaId}, topic: "${result.topic}").`,
+        `✅ [CRON] ${label} concluída (mediaId: ${result.mediaId}, topic: "${result.topic}").`,
       );
     } catch (error) {
       this.logger.error(
-        `❌ [CRON] Falha ao publicar ${type.toUpperCase()}: ${this.getErrorMessage(error)}`,
+        `❌ [CRON] Falha ao publicar ${label}: ${this.getErrorMessage(error)}`,
+        error instanceof Error ? error.stack : undefined,
       );
     }
   }
