@@ -17,6 +17,10 @@ build/
 out/
 *.tsbuildinfo
 
+# Generated media
+public/generated/*
+!public/generated/.gitkeep
+
 # Logs
 logs/
 *.log

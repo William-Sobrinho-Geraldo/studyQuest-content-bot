@@ -5,6 +5,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AiModule } from './modules/ai/ai.module.js';
 import { InstagramModule } from './modules/instagram/instagram.module.js';
+import { MediaModule } from './modules/media/media.module.js';
 import { SchedulerModule } from './modules/scheduler/scheduler.module.js';
 
 @Module({
@@ -14,6 +15,7 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module.js';
     InstagramModule,
     SchedulerModule,
     AiModule,
+    MediaModule,
   ],
   controllers: [AppController],
   providers: [AppService],
