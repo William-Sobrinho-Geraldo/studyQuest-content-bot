@@ -9,7 +9,7 @@ import {
   rename,
   unlink,
 } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
+import { extname, isAbsolute, join, resolve } from 'node:path';
 import {
   BadRequestException,
   HttpException,
@@ -53,13 +53,27 @@ interface StoryResetResult {
   restoredFiles: number;
 }
 
-function resolveContentAssetsDir(): string {
-  const configured = process.env.CONTENT_ASSETS_DIR?.trim();
-
-  if (configured) {
-    return resolve(configured);
+function resolveConfiguredDir(
+  envVarName: string,
+  configured: string | undefined,
+  requireExisting = false,
+): string | null {
+  if (!configured) {
+    return null;
   }
 
+  if (!isAbsolute(configured) || (requireExisting && !existsSync(configured))) {
+    new Logger('MediaService').warn(
+      `Ignoring ${envVarName}="${configured}": not a valid absolute path on this platform.`,
+    );
+
+    return null;
+  }
+
+  return resolve(configured);
+}
+
+function resolveContentAssetsDir(): string {
   const candidates = [
     join(process.cwd(), 'src', 'assets', 'content'),
     join(process.cwd(), 'dist', 'assets', 'content'),
@@ -67,7 +81,26 @@ function resolveContentAssetsDir(): string {
 
   const existing = candidates.find((candidate) => existsSync(candidate));
 
-  return resolve(existing ?? candidates[0]);
+  if (existing) {
+    return resolve(existing);
+  }
+
+  return (
+    resolveConfiguredDir(
+      'CONTENT_ASSETS_DIR',
+      process.env.CONTENT_ASSETS_DIR?.trim(),
+      true,
+    ) ?? resolve(candidates[0])
+  );
+}
+
+function resolveGeneratedImagesDir(): string {
+  return (
+    resolveConfiguredDir(
+      'GENERATED_IMAGES_DIR',
+      process.env.GENERATED_IMAGES_DIR?.trim(),
+    ) ?? resolve(process.cwd(), 'public', 'generated')
+  );
 }
 
 export interface SelectedContentAsset {
@@ -86,10 +119,7 @@ export interface SelectedContentAsset {
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
   private readonly contentDir = resolveContentAssetsDir();
-  private readonly generatedDir = resolve(
-    process.env.GENERATED_IMAGES_DIR?.trim() ||
-      join(process.cwd(), 'public', 'generated'),
-  );
+  private readonly generatedDir = resolveGeneratedImagesDir();
   private selectionQueue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly configService: ConfigService) {
