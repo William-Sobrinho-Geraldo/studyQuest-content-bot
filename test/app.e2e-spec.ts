@@ -10,11 +10,6 @@ const EXPECTED_CRON_JOBS = [
   'post-lunch',
   'story-afternoon',
   'post-evening',
-  'test-story-morning',
-  'test-story-imminent',
-  'test-post-afternoon',
-  'test-story-late-afternoon',
-  'test-post-night',
 ];
 
 describe('AppController (e2e)', () => {
