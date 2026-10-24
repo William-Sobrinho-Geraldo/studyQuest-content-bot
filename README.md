@@ -57,6 +57,14 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Deploy no Render (Free Tier)
+
+- Health check dedicado: `GET /health` retorna `200 OK` com status, timestamp e uptime.
+- Configure um monitor externo (UptimeRobot, cron-job.org, etc.) chamando `/health` a cada 5 a 10 minutos. O Render Free coloca o serviço para dormir após cerca de 15 minutos sem tráfego HTTP, e cron jobs em memória não executam enquanto o processo está suspenso.
+- No painel do Render, defina o Health Check Path como `/health`.
+- `SCHEDULER_TRIGGER_TOKEN` é opcional. Quando definido, `POST /scheduler/trigger/:type` exige o header `x-scheduler-token`.
+- Jobs perdidos durante deploy ou spin down não são recuperados automaticamente, evitando publicações duplicadas.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

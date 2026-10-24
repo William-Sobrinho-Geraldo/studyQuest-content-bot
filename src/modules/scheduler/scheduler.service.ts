@@ -43,21 +43,49 @@ const DEFAULT_STORY_CAPTION =
 
 const CRON_TIME_ZONE = 'America/Sao_Paulo';
 
-const CRON_JOB_NAMES = [
-  'story-morning',
-  'post-lunch',
-  'story-afternoon',
-  'post-evening',
-] as const;
+interface CronJobDefinition {
+  name: string;
+  type: ScheduledPublicationType;
+  label: string;
+  schedule: string;
+  expression: string;
+}
 
-const SCHEDULE_LOG_LINES = [
-  `🗓️ [SCHEDULER] Agendamentos ativos (${CRON_TIME_ZONE}):`,
-  '  • 08:00 — Story (manhã)',
-  '  • 12:30 — Post (almoço)',
-  '  • 18:30 — Story (fim de tarde)',
-  '  • 20:30 — Post (noite)',
-  '  • Reels: somente via trigger manual',
-] as const;
+type RegisteredCronJob = ReturnType<SchedulerRegistry['getCronJob']>;
+
+const CRON_JOBS = {
+  storyMorning: {
+    name: 'story-morning',
+    type: 'stories',
+    label: 'STORY da manhã',
+    schedule: '08:00',
+    expression: '0 0 8 * * *',
+  },
+  postLunch: {
+    name: 'post-lunch',
+    type: 'post',
+    label: 'POST do almoço',
+    schedule: '12:30',
+    expression: '0 30 12 * * *',
+  },
+  storyAfternoon: {
+    name: 'story-afternoon',
+    type: 'stories',
+    label: 'STORY do fim de tarde',
+    schedule: '18:30',
+    expression: '0 30 18 * * *',
+  },
+  postEvening: {
+    name: 'post-evening',
+    type: 'post',
+    label: 'POST da noite',
+    schedule: '20:30',
+    expression: '0 30 20 * * *',
+  },
+} as const satisfies Record<string, CronJobDefinition>;
+
+const CRON_JOB_DEFINITIONS: readonly CronJobDefinition[] =
+  Object.values(CRON_JOBS);
 
 @Injectable()
 export class SchedulerService
@@ -74,84 +102,98 @@ export class SchedulerService
 
   onApplicationBootstrap(): void {
     const registeredJobs = this.schedulerRegistry.getCronJobs();
-    const missingJobs = CRON_JOB_NAMES.filter(
-      (jobName) => !registeredJobs.has(jobName),
+    const missingJobs = CRON_JOB_DEFINITIONS.filter(
+      (job) => !registeredJobs.has(job.name),
     );
 
-    this.logger.log(SCHEDULE_LOG_LINES.join('\n'));
+    this.logger.log(
+      [
+        `🗓️ [SCHEDULER:BOOT] startedAt=${this.formatSaoPauloDate(new Date())}`,
+        `   node=${process.version} pid=${process.pid} env=${process.env.NODE_ENV ?? 'development'}`,
+        `   renderService=${process.env.RENDER_SERVICE_NAME ?? 'n/a'} renderCommit=${process.env.RENDER_GIT_COMMIT ?? 'n/a'}`,
+        '   Cron em memória: execuções perdidas durante sleep/deploy não são recuperadas.',
+        '   Agendamentos:',
+        ...CRON_JOB_DEFINITIONS.map((job) => {
+          const nextRun = this.getNextRun(registeredJobs.get(job.name));
+
+          return `   • ${job.schedule} ${CRON_TIME_ZONE} — ${job.label} (job=${job.name}, next=${nextRun})`;
+        }),
+        '   • Reels: somente via trigger manual',
+      ].join('\n'),
+    );
 
     if (missingJobs.length > 0) {
       this.logger.warn(
-        `[SCHEDULER] Cron jobs não registrados: ${missingJobs.join(', ')}`,
+        `[SCHEDULER] Cron jobs não registrados: ${missingJobs.map((job) => job.name).join(', ')}`,
+      );
+    }
+
+    if (!process.env.SCHEDULER_TRIGGER_TOKEN?.trim()) {
+      this.logger.warn(
+        '[SCHEDULER] SCHEDULER_TRIGGER_TOKEN não definido; POST /scheduler/trigger/:type está sem autenticação.',
       );
     }
   }
 
   onApplicationShutdown(): void {
     const registeredJobs = this.schedulerRegistry.getCronJobs();
+    let stoppedJobs = 0;
 
-    for (const jobName of CRON_JOB_NAMES) {
-      if (!registeredJobs.has(jobName)) {
+    this.logger.log(
+      `🛑 [SCHEDULER:SHUTDOWN] at=${this.formatSaoPauloDate(new Date())} — interrompendo cron jobs em memória (spin down/deploy).`,
+    );
+
+    for (const job of CRON_JOB_DEFINITIONS) {
+      if (!registeredJobs.has(job.name)) {
         continue;
       }
 
-      this.schedulerRegistry.deleteCronJob(jobName);
-      this.logger.log(`🛑 Cron job "${jobName}" stopped during shutdown.`);
+      this.schedulerRegistry.deleteCronJob(job.name);
+      stoppedJobs += 1;
     }
+
+    this.logger.log(
+      `🛑 [SCHEDULER:SHUTDOWN] ${stoppedJobs} cron job(s) removido(s).`,
+    );
   }
 
-  @Cron('0 0 8 * * *', {
-    name: 'story-morning',
+  @Cron(CRON_JOBS.storyMorning.expression, {
+    name: CRON_JOBS.storyMorning.name,
     timeZone: CRON_TIME_ZONE,
   })
   async handleMorningStorySchedule(): Promise<void> {
-    this.logger.log(
-      '⏰ [CRON] Executando publicação de STORY da manhã (08:00)...',
-    );
-
-    await this.runScheduledPublication('stories', 'STORY da manhã');
+    await this.runScheduledPublication(CRON_JOBS.storyMorning);
   }
 
-  @Cron('0 30 12 * * *', {
-    name: 'post-lunch',
+  @Cron(CRON_JOBS.postLunch.expression, {
+    name: CRON_JOBS.postLunch.name,
     timeZone: CRON_TIME_ZONE,
   })
   async handleLunchPostSchedule(): Promise<void> {
-    this.logger.log(
-      '⏰ [CRON] Executando publicação de POST do almoço (12:30)...',
-    );
-
-    await this.runScheduledPublication('post', 'POST do almoço');
+    await this.runScheduledPublication(CRON_JOBS.postLunch);
   }
 
-  @Cron('0 30 18 * * *', {
-    name: 'story-afternoon',
+  @Cron(CRON_JOBS.storyAfternoon.expression, {
+    name: CRON_JOBS.storyAfternoon.name,
     timeZone: CRON_TIME_ZONE,
   })
   async handleAfternoonStorySchedule(): Promise<void> {
-    this.logger.log(
-      '⏰ [CRON] Executando publicação de STORY do fim de tarde (18:30)...',
-    );
-
-    await this.runScheduledPublication('stories', 'STORY do fim de tarde');
+    await this.runScheduledPublication(CRON_JOBS.storyAfternoon);
   }
 
-  @Cron('0 30 20 * * *', {
-    name: 'post-evening',
+  @Cron(CRON_JOBS.postEvening.expression, {
+    name: CRON_JOBS.postEvening.name,
     timeZone: CRON_TIME_ZONE,
   })
   async handleEveningPostSchedule(): Promise<void> {
-    this.logger.log(
-      '⏰ [CRON] Executando publicação de POST da noite (20:30)...',
-    );
-
-    await this.runScheduledPublication('post', 'POST da noite');
+    await this.runScheduledPublication(CRON_JOBS.postEvening);
   }
 
   async triggerManualPublish(
     type: ScheduledPublicationType | string,
   ): Promise<ManualPublishResult> {
     const publicationType = this.normalizeType(type);
+    const startedAtMs = Date.now();
 
     this.logger.log(
       `🚀 [MANUAL] Disparando publicação de ${publicationType.toUpperCase()}...`,
@@ -160,25 +202,31 @@ export class SchedulerService
     const result = await this.publish(publicationType);
 
     this.logger.log(
-      `✅ [MANUAL] Publicação de ${publicationType.toUpperCase()} concluída (mediaId: ${result.mediaId}, topic: "${result.topic}").`,
+      `✅ [MANUAL] Publicação de ${publicationType.toUpperCase()} concluída (durationMs=${Date.now() - startedAtMs}, mediaId: ${result.mediaId}, topic: "${result.topic}").`,
     );
 
     return result;
   }
 
   private async runScheduledPublication(
-    type: ScheduledPublicationType,
-    label = type.toUpperCase(),
+    job: CronJobDefinition,
   ): Promise<void> {
+    const startedAt = new Date();
+    const startedAtMs = Date.now();
+
+    this.logger.log(
+      `⏰ [CRON:FIRE] job=${job.name} type=${this.toPublishedMediaType(job.type)} label="${job.label}" firedAt=${this.formatSaoPauloDate(startedAt)}`,
+    );
+
     try {
-      const result = await this.publish(type);
+      const result = await this.publish(job.type);
 
       this.logger.log(
-        `✅ [CRON] ${label} concluída (mediaId: ${result.mediaId}, topic: "${result.topic}").`,
+        `✅ [CRON:DONE] job=${job.name} type=${result.mediaType} durationMs=${Date.now() - startedAtMs} mediaId=${result.mediaId} topic="${result.topic}"`,
       );
     } catch (error) {
       this.logger.error(
-        `❌ [CRON] Falha ao publicar ${label}: ${this.getErrorMessage(error)}`,
+        `❌ [CRON:ERROR] job=${job.name} type=${this.toPublishedMediaType(job.type)} durationMs=${Date.now() - startedAtMs} message="${this.getErrorMessage(error)}"`,
         error instanceof Error ? error.stack : undefined,
       );
     }
@@ -336,6 +384,28 @@ export class SchedulerService
           `Unsupported publication type: ${type}. Use post, reels or stories.`,
         );
     }
+  }
+
+  private getNextRun(job: RegisteredCronJob | undefined): string {
+    if (!job) {
+      return 'n/a';
+    }
+
+    try {
+      return job.nextDate().toISO() ?? 'n/a';
+    } catch {
+      return 'n/a';
+    }
+  }
+
+  private formatSaoPauloDate(date: Date): string {
+    const localTime = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: CRON_TIME_ZONE,
+      dateStyle: 'short',
+      timeStyle: 'medium',
+    }).format(date);
+
+    return `${date.toISOString()} (${localTime} ${CRON_TIME_ZONE})`;
   }
 
   private getErrorMessage(error: unknown): string {
