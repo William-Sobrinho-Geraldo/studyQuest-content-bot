@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import {
   access,
   copyFile,
@@ -52,6 +53,23 @@ interface StoryResetResult {
   restoredFiles: number;
 }
 
+function resolveContentAssetsDir(): string {
+  const configured = process.env.CONTENT_ASSETS_DIR?.trim();
+
+  if (configured) {
+    return resolve(configured);
+  }
+
+  const candidates = [
+    join(process.cwd(), 'src', 'assets', 'content'),
+    join(process.cwd(), 'dist', 'assets', 'content'),
+  ];
+
+  const existing = candidates.find((candidate) => existsSync(candidate));
+
+  return resolve(existing ?? candidates[0]);
+}
+
 export interface SelectedContentAsset {
   sourceFileName: string;
   fileName: string;
@@ -67,17 +85,16 @@ export interface SelectedContentAsset {
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
-  private readonly contentDir = resolve(
-    process.env.CONTENT_ASSETS_DIR?.trim() ||
-      join(process.cwd(), 'src', 'assets', 'content'),
-  );
+  private readonly contentDir = resolveContentAssetsDir();
   private readonly generatedDir = resolve(
     process.env.GENERATED_IMAGES_DIR?.trim() ||
       join(process.cwd(), 'public', 'generated'),
   );
   private selectionQueue: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {
+    this.logger.log(`Content assets directory resolved to "${this.contentDir}".`);
+  }
 
   async selectNextContentAsset(
     type: ContentAssetType,
