@@ -82,6 +82,34 @@ const CRON_JOBS = {
     schedule: '20:30',
     expression: '0 30 20 * * *',
   },
+  testStoryMorning: {
+    name: 'test-story-morning',
+    type: 'stories',
+    label: 'TESTE - Story da manhã',
+    schedule: '09:00',
+    expression: '0 0 9 * * *',
+  },
+  testPostAfternoon: {
+    name: 'test-post-afternoon',
+    type: 'post',
+    label: 'TESTE - Post início da tarde',
+    schedule: '14:00',
+    expression: '0 0 14 * * *',
+  },
+  testStoryLateAfternoon: {
+    name: 'test-story-late-afternoon',
+    type: 'stories',
+    label: 'TESTE - Story meio da tarde',
+    schedule: '16:30',
+    expression: '0 30 16 * * *',
+  },
+  testPostNight: {
+    name: 'test-post-night',
+    type: 'post',
+    label: 'TESTE - Post fim da noite',
+    schedule: '22:00',
+    expression: '0 0 22 * * *',
+  },
 } as const satisfies Record<string, CronJobDefinition>;
 
 const CRON_JOB_DEFINITIONS: readonly CronJobDefinition[] =
@@ -187,6 +215,38 @@ export class SchedulerService
   })
   async handleEveningPostSchedule(): Promise<void> {
     await this.runScheduledPublication(CRON_JOBS.postEvening);
+  }
+
+  @Cron(CRON_JOBS.testStoryMorning.expression, {
+    name: CRON_JOBS.testStoryMorning.name,
+    timeZone: CRON_TIME_ZONE,
+  })
+  async handleTestMorningStorySchedule(): Promise<void> {
+    await this.runScheduledPublication(CRON_JOBS.testStoryMorning);
+  }
+
+  @Cron(CRON_JOBS.testPostAfternoon.expression, {
+    name: CRON_JOBS.testPostAfternoon.name,
+    timeZone: CRON_TIME_ZONE,
+  })
+  async handleTestAfternoonPostSchedule(): Promise<void> {
+    await this.runScheduledPublication(CRON_JOBS.testPostAfternoon);
+  }
+
+  @Cron(CRON_JOBS.testStoryLateAfternoon.expression, {
+    name: CRON_JOBS.testStoryLateAfternoon.name,
+    timeZone: CRON_TIME_ZONE,
+  })
+  async handleTestLateAfternoonStorySchedule(): Promise<void> {
+    await this.runScheduledPublication(CRON_JOBS.testStoryLateAfternoon);
+  }
+
+  @Cron(CRON_JOBS.testPostNight.expression, {
+    name: CRON_JOBS.testPostNight.name,
+    timeZone: CRON_TIME_ZONE,
+  })
+  async handleTestNightPostSchedule(): Promise<void> {
+    await this.runScheduledPublication(CRON_JOBS.testPostNight);
   }
 
   async triggerManualPublish(
