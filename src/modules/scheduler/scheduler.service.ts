@@ -89,6 +89,13 @@ const CRON_JOBS = {
     schedule: '09:00',
     expression: '0 0 9 * * *',
   },
+  testStoryImminent: {
+    name: 'test-story-imminent',
+    type: 'stories',
+    label: 'TESTE - Story Iminente',
+    schedule: '09:40',
+    expression: '0 40 9 * * *',
+  },
   testPostAfternoon: {
     name: 'test-post-afternoon',
     type: 'post',
@@ -223,6 +230,14 @@ export class SchedulerService
   })
   async handleTestMorningStorySchedule(): Promise<void> {
     await this.runScheduledPublication(CRON_JOBS.testStoryMorning);
+  }
+
+  @Cron(CRON_JOBS.testStoryImminent.expression, {
+    name: CRON_JOBS.testStoryImminent.name,
+    timeZone: CRON_TIME_ZONE,
+  })
+  async handleTestImminentStorySchedule(): Promise<void> {
+    await this.runScheduledPublication(CRON_JOBS.testStoryImminent);
   }
 
   @Cron(CRON_JOBS.testPostAfternoon.expression, {
